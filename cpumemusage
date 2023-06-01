@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# 参数检查
+if [ "$#" -ne 2 ]; then
+    echo "usage: $0 <process_id> <duration_seconds>"
+    exit 1
+fi
+
+process_id=$1
+duration=$2
+
+# 创建目录和数据文件
+mkdir -p data
+cpu_data="data/cpu_usage_${process_id}.dat"
+mem_data="data/mem_usage_${process_id}.dat"
+
+# 清空或创建数据文件
+echo "" > $cpu_data
+echo "" > $mem_data
+
+# 收集CPU和内存使用率
+end_time=$(($(date +%s) + duration))
+while [ $(date +%s) -le $end_time ]; do
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        ps -p $process_id -o %cpu=,%mem= | awk -v timestamp="$timestamp" '{print timestamp, $1, $2}' >> $cpu_data
+    sleep 1
+done
+
+# 安装 gnuplot (如果没有)
+if ! command -v gnuplot &> /dev/null; then
+    echo "gnuplot could not be found. Installing..."
+    sudo apt-get install gnuplot
+fi
+
+# 绘制曲线
+gnuplot <<- EOF
+    set term png size 1280,720
+    set output 'data/cpu_mem_usage_${process_id}.png'
+    set title 'CPU and Memory usage for process ${process_id}'
+    set ylabel 'Percentage'
+    set xdata time
+    set timefmt '%Y-%m-%d %H:%M:%S'
+    set format x '%H:%M:%S'
+    set xlabel 'Time'
+    set autoscale y
+    set grid
+    plot '$cpu_data' using 1:2 with lines title 'CPU%', \
+         '$mem_data' using 1:3 with lines title 'Memory%'
+EOF
+
+echo "CPU and Memory usage curve saved to data/cpu_mem_usage_${process_id}.png"
